@@ -1,57 +1,42 @@
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/gpio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
+// Handler in case our application overflows the stack
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
+    (void) xTask;
+    (void) pcTaskName;
 
-/*
- * Handler in case our application overflows the stack
- */
-void vApplicationStackOverflowHook(
-	TaskHandle_t xTask __attribute__((unused)),
-    char *pcTaskName __attribute__((unused))) {
-
-	for (;;);
+    for (;;);
 }
 
-/*
- * Task that toggles PC13, which is the LED
- */
-static void task1(void *args __attribute__((unused))) {
-    
+// Task that toggles PC13, which is the LED
+static void taskLed(void *args) {
+    (void) args;
+
     for (;;) {
-		gpio_toggle(GPIOC, GPIO13);
-		vTaskDelay(pdMS_TO_TICKS(1000));
-	}
+        gpio_toggle(GPIOC, GPIO13);
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
 
-/*
- * Main loop, this is where our program starts
- */
 int main(void) {
-    // Setup main clock, using external 8MHz crystal 
-    rcc_clock_setup_in_hse_8mhz_out_72mhz();
+    //setup main clock, using external 8MHz crystal
+    rcc_clock_setup_pll(&rcc_hse_configs[RCC_CLOCK_HSE8_72MHZ]);
 
-    // Enable clock for GPIO channel C
+    //enable clock for GPIO port C
     rcc_periph_clock_enable(RCC_GPIOC);
 
-    // Set pinmode for PC13
-	gpio_set_mode(
-		GPIOC,
-		GPIO_MODE_OUTPUT_2_MHZ,
-		GPIO_CNF_OUTPUT_PUSHPULL,
-		GPIO13);
+    //set pinmode for PC13
+    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
 
-	// Turn LED off
-	gpio_set(GPIOC, GPIO13);
+    //tell FreeRTOS about our toggle task
+    xTaskCreate(taskLed, "LED", 100, NULL, 2, NULL);
 
-    // Tell FreeRTOS about our toggle task, and set it's stack and priority
-	xTaskCreate(task1, "LED", 100, NULL, 2, NULL);
+    //start task scheduler
+    vTaskStartScheduler();
 
-    // Start RTOS Task scheduler
-	vTaskStartScheduler();
-
-    // The task scheduler is blocking, so we should never come here...
-	for (;;);
-	return 0;
+    //task scheduler is blocking, we should never come here
+    for (;;);
 }
